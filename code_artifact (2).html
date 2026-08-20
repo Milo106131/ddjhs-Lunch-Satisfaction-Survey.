@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>午餐滿意度</title>
+    <!-- 引入 Tailwind CSS 進行現代化美化 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome 圖標 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', "Microsoft JhengHei", sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 p-4 sm:p-8">
+
+    <div class="max-w-6xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden border border-slate-100">
+        
+        <!-- Header 標題區：顯示午餐滿意度 -->
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 text-white flex flex-row justify-between items-center gap-4">
+            <div class="text-lg font-bold flex items-center gap-2">
+                <i class="fa-solid fa-utensils"></i> 午餐滿意度
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- 鎖定狀態指示與解鎖按鈕 -->
+                <div id="authStatusContainer" class="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg border border-white/20 text-sm whitespace-nowrap">
+                    <i id="lockIcon" class="fa-solid fa-lock text-amber-300"></i>
+                    <span id="lockStatusText" class="font-medium text-amber-100">已上鎖</span>
+                    <button onclick="openUnlockModal()" id="unlockBtn" class="ml-1 bg-white text-blue-700 hover:bg-blue-50 px-3 py-1 rounded-md text-xs font-bold transition shadow-sm whitespace-nowrap">
+                        解鎖操作
+                    </button>
+                    <button onclick="lockSystem()" id="lockBtn" class="hidden bg-rose-500 hover:bg-rose-600 text-white px-3 py-1 rounded-md text-xs font-bold transition shadow-sm whitespace-nowrap">
+                        重新上鎖
+                    </button>
+                </div>
+                
+                <button onclick="addNewRow()" id="addRowBtn" disabled class="bg-white/15 opacity-50 cursor-not-allowed border border-white/30 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 backdrop-blur-sm whitespace-nowrap">
+                    <i class="fa-solid fa-plus"></i> 新增項目
+                </button>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-blue-50 border border-blue-100 p-3 rounded-lg text-sm text-blue-800 gap-2">
+                <span id="rowCount" class="font-bold whitespace-nowrap ml-auto">總計: 0 項</span>
+            </div>
+
+            <!-- 清單列表容器 -->
+            <div id="itemList" class="space-y-3">
+                <!-- 項目會透過 JavaScript 動態載入 -->
+            </div>
+        </div>
+
+        <div class="bg-slate-100 px-6 py-3 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2">
+            <div>「按這裡」連結不受鎖定限制，隨時可點擊瀏覽。</div>
+            <div id="statusMessage" class="text-emerald-600 font-medium"></div>
+        </div>
+    </div>
+
+    <!-- 密碼解鎖 Modal -->
+    <div id="unlockModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-blue-600"></i> 請輸入管理密碼
+                </h3>
+                <button onclick="closeUnlockModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">預設密碼為：<code class="bg-slate-100 px-1.5 py-0.5 rounded text-blue-600 font-bold">1234</code></p>
+            
+            <div class="space-y-3">
+                <input type="password" id="passwordInput" placeholder="請輸入密碼..." 
+                    class="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    onkeypress="if(event.key === 'Enter') verifyPassword()">
+                <div id="passwordError" class="text-rose-500 text-xs hidden"></div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="closeUnlockModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition">
+                    取消
+                </button>
+                <button onclick="verifyPassword()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2">
+                    <i class="fa-solid fa-unlock"></i> 確認解鎖
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 預設解鎖密碼
+        const CORRECT_PASSWORD = "1234";
+        // 系統解鎖狀態變數
+        let isUnlocked = false;
+
+        // 從 LocalStorage 載入資料，若無則使用預設示範資料
+        let itemsData = JSON.parse(localStorage.getItem('lunch_satisfaction_data')) || [
+            { id: 1, semester: "115-1", week: 4, startDate: "2026-09-21", endDate: "2026-09-25", linkUrl: "", note: "" }
+        ];
+
+        // 儲存資料到 LocalStorage
+        function saveToLocalStorage() {
+            localStorage.setItem('lunch_satisfaction_data', JSON.stringify(itemsData));
+        }
+
+        // 產生從 115學年度第一學期 到 150學年度第二學期 的完整選項清單
+        function generateSemesterOptions(selectedVal) {
+            let optionsHTML = '';
+            for (let year = 115; year <= 150; year++) {
+                for (let term = 1; term <= 2; term++) {
+                    const val = `${year}-${term}`;
+                    const termName = (term === 1) ? '第一學期' : '第二學期';
+                    const text = `${year}學年度${termName}`;
+                    const selected = (val === selectedVal) ? 'selected' : '';
+                    optionsHTML += `<option value="${val}" ${selected}>${text}</option>`;
+                }
+            }
+            return optionsHTML;
+        }
+
+        // 產生從第 1 週 到 第 22 週 的選項清單
+        function generateWeekOptions(selectedWeek) {
+            let optionsHTML = '';
+            for (let w = 1; w <= 22; w++) {
+                const selected = (w == selectedWeek) ? 'selected' : '';
+                optionsHTML += `<option value="${w}" ${selected}>第${w}週</option>`;
+            }
+            return optionsHTML;
+        }
+
+        // 渲染清單畫面
+        function renderList() {
+            const listContainer = document.getElementById('itemList');
+            document.getElementById('rowCount').textContent = `總計: ${itemsData.length} 項`;
+            
+            const disabledAttr = isUnlocked ? '' : 'disabled';
+            const readonlyAttr = isUnlocked ? '' : 'readonly';
+            const bgClass = isUnlocked ? 'bg-slate-50' : 'bg-slate-100 opacity-80 cursor-not-allowed';
+
+            if (itemsData.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <i class="fa-solid fa-folder-open text-3xl mb-2"></i>
+                        <p>目前尚無任何項目。</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            itemsData.forEach((item, index) => {
+                let linkActionHTML = '';
+                const trimmedUrl = item.linkUrl ? item.linkUrl.trim() : '';
+                
+                if (trimmedUrl !== '') {
+                    // 有填網址：變成藍色可點擊的超連結（完全不受鎖定影響）
+                    linkActionHTML = `<a href="${trimmedUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 underline font-semibold cursor-pointer whitespace-nowrap z-10 relative">按這裡</a>`;
+                } else {
+                    // 沒填網址：提示尚未輸入
+                    linkActionHTML = `<span onclick="alertNoUrl()" class="text-slate-400 hover:text-slate-600 cursor-pointer whitespace-nowrap" title="請先解鎖並填入網址">按這裡</span>`;
+                }
+
+                // 網址輸入框只在解鎖時顯示
+                let urlInputContainer = '';
+                if (isUnlocked) {
+                    urlInputContainer = `
+                        <div class="flex items-center gap-1 ${bgClass} border border-slate-300 rounded-lg px-2 py-1.5 focus-within:ring-2 focus-within:ring-blue-500">
+                            <i class="fa-solid fa-link text-slate-400 text-xs"></i>
+                            <input type="url" value="${item.linkUrl || ''}" oninput="updateItem(${index}, 'linkUrl', this.value)" 
+                                class="bg-transparent text-xs text-slate-700 focus:outline-none w-36 sm:w-48"
+                                placeholder="貼上網址 (https://...)">
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div class="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition group">
+                        
+                        <!-- 左側：學期與週次選單 -->
+                        <div class="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+                            <div class="relative">
+                                <select onchange="updateItem(${index}, 'semester', this.value)" ${disabledAttr}
+                                    class="${bgClass} border border-slate-300 text-slate-800 text-sm font-semibold rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer appearance-none">
+                                    ${generateSemesterOptions(item.semester)}
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                                </div>
+                            </div>
+
+                            <span class="text-sm font-medium text-slate-600">-</span>
+
+                            <div class="relative">
+                                <select onchange="updateItem(${index}, 'week', this.value)" ${disabledAttr}
+                                    class="${bgClass} border border-slate-300 text-slate-800 text-sm font-semibold rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer appearance-none">
+                                    ${generateWeekOptions(item.week)}
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 中間：起訖日期選擇器 -->
+                        <div class="flex items-center gap-2 w-full xl:w-auto">
+                            <span class="text-xs text-slate-400 font-medium whitespace-nowrap">起訖日期：</span>
+                            <input type="date" value="${item.startDate}" onchange="updateItem(${index}, 'startDate', this.value)" ${disabledAttr}
+                                class="${bgClass} border border-slate-300 text-slate-700 text-sm rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <span class="text-slate-400">~</span>
+                            <input type="date" value="${item.endDate}" onchange="updateItem(${index}, 'endDate', this.value)" ${disabledAttr}
+                                class="${bgClass} border border-slate-300 text-slate-700 text-sm rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+
+                        <!-- 右側：「按這裡」連結、網址輸入框、備註、刪除 -->
+                        <div class="flex flex-wrap items-center gap-2 w-full xl:w-auto justify-between xl:justify-end">
+                            ${linkActionHTML}
+                            ${urlInputContainer}
+
+                            <input type="text" value="${item.note}" oninput="updateItem(${index}, 'note', this.value)" ${readonlyAttr}
+                                class="${bgClass} border border-slate-200 text-slate-500 text-xs rounded-lg px-3 py-2 w-28 focus:w-36 transition-all focus:outline-none focus:border-blue-500"
+                                placeholder="備註說明...">
+                            
+                            <button onclick="deleteItem(${index})" ${disabledAttr} 
+                                class="text-slate-400 ${isUnlocked ? 'hover:text-red-500 hover:bg-red-50 cursor-pointer' : 'opacity-40 cursor-not-allowed'} p-2 rounded-lg transition" title="刪除此項">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            listContainer.innerHTML = html;
+        }
+
+        // 提示尚未填寫網址
+        function alertNoUrl() {
+            showStatus("提示：請先解鎖並填入有效網址，此「按這裡」連結即可直接開啟！");
+        }
+
+        // 開啟密碼解鎖對話框
+        function openUnlockModal() {
+            document.getElementById('unlockModal').classList.remove('hidden');
+            document.getElementById('passwordInput').value = '';
+            document.getElementById('passwordError').classList.add('hidden');
+            setTimeout(() => document.getElementById('passwordInput').focus(), 100);
+        }
+
+        // 關閉密碼解鎖對話框
+        function closeUnlockModal() {
+            document.getElementById('unlockModal').classList.add('hidden');
+        }
+
+        // 驗證密碼
+        function verifyPassword() {
+            const pwd = document.getElementById('passwordInput').value;
+            const errDiv = document.getElementById('passwordError');
+
+            if (pwd === CORRECT_PASSWORD) {
+                isUnlocked = true;
+                closeUnlockModal();
+                updateUIState();
+                renderList();
+                showStatus("系統已成功解鎖");
+            } else {
+                errDiv.textContent = "密碼錯誤（預設密碼為 1234）";
+                errDiv.classList.remove('hidden');
+            }
+        }
+
+        // 重新上鎖
+        function lockSystem() {
+            isUnlocked = false;
+            updateUIState();
+            renderList();
+            showStatus("系統已重新上鎖");
+        }
+
+        // 更新頂部按鈕與狀態
+        function updateUIState() {
+            const lockIcon = document.getElementById('lockIcon');
+            const lockStatusText = document.getElementById('lockStatusText');
+            const unlockBtn = document.getElementById('unlockBtn');
+            const lockBtn = document.getElementById('lockBtn');
+            const addRowBtn = document.getElementById('addRowBtn');
+
+            if (isUnlocked) {
+                lockIcon.className = "fa-solid fa-lock-open text-emerald-300";
+                lockStatusText.textContent = "已解鎖";
+                lockStatusText.className = "font-medium text-emerald-100";
+                unlockBtn.classList.add('hidden');
+                lockBtn.classList.remove('hidden');
+                
+                addRowBtn.removeAttribute('disabled');
+                addRowBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                addRowBtn.classList.add('hover:bg-white/25', 'cursor-pointer');
+            } else {
+                lockIcon.className = "fa-solid fa-lock text-amber-300";
+                lockStatusText.textContent = "已上鎖";
+                lockStatusText.className = "font-medium text-amber-100";
+                unlockBtn.classList.remove('hidden');
+                lockBtn.classList.add('hidden');
+                
+                addRowBtn.setAttribute('disabled', 'true');
+                addRowBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                addRowBtn.classList.remove('hover:bg-white/25', 'cursor-pointer');
+            }
+        }
+
+        // 更新資料狀態
+        function updateItem(index, field, value) {
+            if (!isUnlocked) return;
+            itemsData[index][field] = value;
+            saveToLocalStorage(); // 每次變更自動儲存
+            showStatus("已儲存變更");
+            if (field === 'linkUrl') {
+                renderList();
+            }
+        }
+
+        // 新增一行
+        function addNewRow() {
+            if (!isUnlocked) return;
+            const newWeekNum = (itemsData.length % 22) + 1;
+            itemsData.push({
+                id: Date.now(),
+                semester: "115-1",
+                week: newWeekNum,
+                startDate: new Date().toISOString().split('T')[0],
+                endDate: new Date().toISOString().split('T')[0],
+                linkUrl: "",
+                note: ""
+            });
+            saveToLocalStorage(); // 新增時自動儲存
+            renderList();
+            showStatus("已新增項目");
+        }
+
+        // 刪除項目
+        function deleteItem(index) {
+            if (!isUnlocked) return;
+            itemsData.splice(index, 1);
+            saveToLocalStorage(); // 刪除時自動儲存
+            renderList();
+            showStatus("已刪除項目");
+        }
+
+        // 顯示狀態提示
+        function showStatus(text) {
+            const msg = document.getElementById('statusMessage');
+            if (!msg) return;
+            msg.textContent = text;
+            setTimeout(() => { msg.textContent = ""; }, 4000);
+        }
+
+        // 初始化載入
+        window.onload = function() {
+            renderList();
+        }
+    </script>
+</body>
+</html>
